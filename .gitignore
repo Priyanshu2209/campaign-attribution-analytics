@@ -1,0 +1,19 @@
+# ----- Secrets -----
+.env
+
+# ----- PostgreSQL -----
+pgdata/
+*.log
+
+# ----- Python -----
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# ----- OS / editors -----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
