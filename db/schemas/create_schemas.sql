@@ -15,17 +15,19 @@
 
 -- -------------------------------------------------------------
 -- 1. cust_relationship
---    Everyone the company knows about: visitors, leads and
---    customers, plus their details.
+--    Who the client is: visitors, leads and customers, plus
+--    their details, family/trusted contact and consents.
 --    Tables (planned): customers, customer_addresses,
---    customer_employment, customer_financial_profiles,
---    customer_identity_verifications, consents, communications
+--    customer_contacts, customer_related_persons,
+--    customer_financial_profiles, customer_employment,
+--    customer_identity_verifications, consents, communications,
+--    corporate_details, corporate_owners
 -- -------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS cust_relationship
     AUTHORIZATION campaign_admin;
 
 COMMENT ON SCHEMA cust_relationship IS
-    'Customer relationship data: visitors, leads, customers and their details (addresses, employment, KYC, consent, communications).';
+    'Customer relationship data: visitors, leads, customers and their details (addresses, contacts, related persons, KYC, consent, communications).';
 
 
 -- -------------------------------------------------------------
@@ -44,35 +46,50 @@ COMMENT ON SCHEMA marketing IS
 
 -- -------------------------------------------------------------
 -- 3. sales
---    Advisors, appointments and the money side: investments
---    and payments.
---    Tables (planned): advisors, advisor_availability,
---    appointments, investment_products, payment_methods,
---    investments, payments
+--    The advisor-led side: advisors, which advisor serves which
+--    client, and appointments.
+--    Tables (planned): advisors, customer_advisor_assignments,
+--    appointments, advisor_availability
 -- -------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS sales
     AUTHORIZATION campaign_admin;
 
 COMMENT ON SCHEMA sales IS
-    'Advisors, appointments, investment products, investments and payments.';
+    'Advisors, client-advisor assignments and appointments.';
 
 
 -- -------------------------------------------------------------
--- 4. reporting
+-- 4. wealth
+--    Accounts and money: the client's accounts (TFSA, RRSP,
+--    joint...), who holds them, what is invested in them and
+--    every movement of money.
+--    Tables (planned): investment_products, accounts,
+--    account_holders, investments, payments, transactions
+-- -------------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS wealth
+    AUTHORIZATION campaign_admin;
+
+COMMENT ON SCHEMA wealth IS
+    'Accounts, account holders, investment products, investments, payments and transactions.';
+
+
+-- -------------------------------------------------------------
+-- 5. reporting
 --    Views only (no raw data). Analysts and Python read from
 --    here, so they can get read-only access to this schema
 --    without seeing the raw tables.
---    Views (planned): funnel, campaign ROI, advisor performance
+--    Views (planned): funnel, campaign ROI, channel ROI,
+--    advisor performance, customer segments
 -- -------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS reporting
     AUTHORIZATION campaign_admin;
 
 COMMENT ON SCHEMA reporting IS
-    'Reporting views for analysis: funnel, campaign ROI, advisor performance, customer segments.';
+    'Reporting views for analysis: funnel, campaign and channel ROI, advisor performance, customer segments.';
 
 
 -- -------------------------------------------------------------
--- 5. audit
+-- 6. audit
 --    History of changes, written automatically by triggers.
 --    Kept separate so normal users can never edit the history.
 --    Tables (planned): audit_log
@@ -89,5 +106,5 @@ COMMENT ON SCHEMA audit IS
 -- -------------------------------------------------------------
 SELECT schema_name, schema_owner
 FROM information_schema.schemata
-WHERE schema_name IN ('cust_relationship', 'marketing', 'sales', 'reporting', 'audit')
+WHERE schema_name IN ('cust_relationship', 'marketing', 'sales', 'wealth', 'reporting', 'audit')
 ORDER BY schema_name;
