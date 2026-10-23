@@ -91,34 +91,6 @@ In pgAdmin: **right-click Servers → Register → Server**, then fill in:
 
 Click **Save**. The server appears in the left panel.
 
-### Step 6: Create the schemas and tables
-
-Run the SQL files **in this order**. Order matters: tables live inside schemas, and the tables use the shared function.
-
-| Order | File | Creates |
-|---|---|---|
-| 1 | `db/schemas/create_schemas.sql` | All schemas |
-| 2 | `db/functions/set_updated_at.sql` | The trigger function that keeps `updated_at` current |
-| 3 | `db/migrations/001_create_customers.sql` | `cust_relationship.customers` |
-| 4+ | `db/migrations/002_...`, `003_...` | Later tables, in number order |
-
-For each file, in pgAdmin:
-
-1. Expand **Campaign DB (Docker) → Databases**, right-click **campaign_db → Query Tool**.
-2. Click the **folder icon (Open File)** and choose the file from your cloned project folder. (Or copy the file's contents from GitHub and paste them in.)
-3. Press **F5** (Execute). The **Messages** tab should show no errors.
-
-When all files have run, refresh **Schemas** in the left panel: you should see `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting` and `audit`, and the `customers` table under `cust_relationship → Tables`.
-
-**Prefer the terminal?** The project's `db/` folder is available inside the container at `/db`, so each file can also be run like this:
-
-```powershell
-docker compose exec db psql -U campaign_admin -d campaign_db -f /db/schemas/create_schemas.sql
-docker compose exec db psql -U campaign_admin -d campaign_db -f /db/functions/set_updated_at.sql
-docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/001_create_customers.sql
-```
-
-All files are safe to run again (`IF NOT EXISTS` / `CREATE OR REPLACE`), so running one twice by mistake does no harm.
 
 ### Useful commands
 
@@ -135,11 +107,6 @@ All files are safe to run again (`IF NOT EXISTS` / `CREATE OR REPLACE`), so runn
 
 Paths like `/db/...` are **inside the container**: the project's `db/` folder is mounted there.
 
-### For developers: adding a new table
-
-1. Create the next numbered file in `db/migrations/`, e.g. `002_create_customer_addresses.sql`. Always reference tables with their schema (`cust_relationship.customer_addresses`).
-2. Run it in pgAdmin (Step 6) and test it.
-3. Never edit a migration that is already pushed. Make a new one (e.g. `003_alter_...sql`) instead, so everyone can update their database the same way.
 
 ### Troubleshooting
 
@@ -224,41 +191,7 @@ Tables are grouped into **schemas** (like folders inside the database). This kee
 | `audit` | Change history written by triggers |
 | `reporting` | Views for analysis (funnel, ROI, advisor performance). Analysts get read-only access here |
 
-### All tables
 
-Status: ✅ built · 📝 designed · ⚪ optional (designed, may not be built)
-
-| # | Schema | Table | Purpose | Status |
-|---|---|---|---|---|
-| 1 | cust_relationship | `customers` | Everyone: visitors, leads and customers (`is_customer`) | ✅ |
-| 2 | cust_relationship | `customer_addresses` | Address history (residential, mailing, business) | 📝 |
-| 3 | cust_relationship | `customer_contacts` | Extra phones and emails | 📝 |
-| 4 | cust_relationship | `customer_related_persons` | Family, dependents, trusted contact person | 📝 |
-| 5 | cust_relationship | `customer_financial_profiles` | KYC: income, assets, risk tolerance, next review | 📝 |
-| 6 | cust_relationship | `customer_employment` | Employment history | 📝 |
-| 7 | cust_relationship | `customer_identity_verifications` | How and when ID was verified (last 4 digits only) | 📝 |
-| 8 | cust_relationship | `consents` | Marketing (CASL), privacy and e-delivery consent | 📝 |
-| 9 | cust_relationship | `communications` | Emails and pop-ups sent, opened, clicked | ⚪ |
-| 10 | cust_relationship | `corporate_details` | Extra data for corporate customers | ⚪ |
-| 11 | cust_relationship | `corporate_owners` | Owners and beneficial owners of corporate customers | ⚪ |
-| 12 | marketing | `campaigns` | Campaign, dates, budget, status | 📝 |
-| 13 | marketing | `channels` | Lookup: website, email, social, event, referral | 📝 |
-| 14 | marketing | `campaign_channels` | Campaign × channel, tracking code, spend | 📝 |
-| 15 | marketing | `campaign_offers` | Fee discount or bonus interest | 📝 |
-| 16 | marketing | `campaign_touchpoints` | Every known contact with a campaign (funnel stage 1) | 📝 |
-| 17 | sales | `advisors` | Advisor details | 📝 |
-| 18 | sales | `customer_advisor_assignments` | Which advisor serves which client, with history | 📝 |
-| 19 | sales | `appointments` | Bookings and outcomes (funnel stage 2) | 📝 |
-| 20 | sales | `advisor_availability` | Time slots for auto-assigning advisors | ⚪ |
-| 21 | wealth | `investment_products` | Lookup: GICs, funds, ETFs, with rates and fees | 📝 |
-| 22 | wealth | `accounts` | TFSA, RRSP, RRIF, FHSA, RESP, non-registered | 📝 |
-| 23 | wealth | `account_holders` | Customers ↔ accounts (primary, joint, power of attorney) | 📝 |
-| 24 | wealth | `investments` | What was bought, in which account, from which campaign | 📝 |
-| 25 | wealth | `payments` | How each investment was paid | 📝 |
-| 26 | wealth | `transactions` | Deposits, withdrawals, redemptions, fees, interest | 📝 |
-| 27 | audit | `audit_log` | Every insert, update and delete, written by triggers | 📝 |
-
-**How attribution works:** a new customer's first campaign is stored in `customers.acquired_campaign_id` (first-touch). Each investment by an existing customer stores its own `investments.campaign_id`. `campaign_touchpoints` keeps the full history for other attribution models in Python.
 
 ### Design conventions
 
