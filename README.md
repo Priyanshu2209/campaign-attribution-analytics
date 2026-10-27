@@ -91,6 +91,33 @@ In pgAdmin: **right-click Servers → Register → Server**, then fill in:
 
 Click **Save**. The server appears in the left panel.
 
+### Step 6: Create the schemas and tables
+
+Run the SQL files **in this order**. Order matters: tables live inside schemas, so the schemas must exist first.
+
+| Order | File | Creates | Status |
+|---|---|---|---|
+| 1 | `db/schemas/create_schemas.sql` | All 6 schemas | ✅ available |
+| 2 | `db/functions/*.sql` | Shared functions (e.g. the trigger that keeps `updated_at` current) | coming soon |
+| 3 | `db/migrations/001_...`, `002_...` | The tables, in number order | coming soon |
+
+Right now only step 1 exists; the function and table files are added here as each module is finished.
+
+For each file, in pgAdmin:
+
+1. Expand **Campaign DB (Docker) → Databases**, right-click **campaign_db → Query Tool**.
+2. Click the **folder icon (Open File)** and choose the file from your cloned project folder. (Or copy the file's contents from GitHub and paste them in.)
+3. Press **F5** (Execute). The **Messages** tab should show no errors.
+
+When it has run, refresh **Schemas** in the left panel: you should see `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting` and `audit`.
+
+**Prefer the terminal?** The project's `db/` folder is available inside the container at `/db`, so a file can also be run like this:
+
+```powershell
+docker compose exec db psql -U campaign_admin -d campaign_db -f /db/schemas/create_schemas.sql
+```
+
+The file is safe to run again (`IF NOT EXISTS`), so running it twice by mistake does no harm.
 
 ### Useful commands
 
@@ -107,6 +134,11 @@ Click **Save**. The server appears in the left panel.
 
 Paths like `/db/...` are **inside the container**: the project's `db/` folder is mounted there.
 
+### For developers: adding a new table
+
+1. Create the next numbered file in `db/migrations/`, e.g. `002_create_customer_addresses.sql`. Always reference tables with their schema (`cust_relationship.customer_addresses`).
+2. Run it in pgAdmin (Step 6) and test it.
+3. Never edit a migration that is already pushed. Make a new one (e.g. `003_alter_...sql`) instead, so everyone can update their database the same way.
 
 ### Troubleshooting
 
@@ -116,7 +148,6 @@ Paths like `/db/...` are **inside the container**: the project's `db/` folder is
 | `port is already allocated` | Something else uses port 5433. Change `POSTGRES_PORT` in `.env` (e.g. `5434`) and run `docker compose up -d` again. |
 | `password authentication failed` in pgAdmin | The password only applies on first creation. Use the original one, or reset with `docker compose down -v` (deletes data). |
 | `schema "cust_relationship" does not exist` | The files were run out of order. Run `create_schemas.sql` first, then the others (Step 6). |
-| `function public.set_updated_at() does not exist` | Run `db/functions/set_updated_at.sql` before the migrations. |
 
 ---
 
@@ -159,14 +190,15 @@ The project answers questions like:
 campaign-attribution-analytics/
 ├── db/                      # Everything PostgreSQL
 │   ├── schemas/             # Creates all schemas (run first)
-│   ├── functions/           # Shared functions & trigger functions (run second)
-│   ├── migrations/          # Table definitions, run in order (001_, 002_, ...)
+│   ├── functions/           # Shared functions & trigger functions   (coming soon)
+│   ├── migrations/          # Table definitions, run in order        (coming soon)
 │   ├── views/               # Reporting views                       (planned)
 │   └── seeds/               # Sample data                           (planned)
 ├── queries/                 # Business questions answered in SQL    (planned)
 ├── analysis/                # Python notebooks & reports            (planned)
-├── docs/                    # Final ERD and design documents        (planned)
-├── doc_history/             # Earlier versions of ERDs and design sheets (v1, v2, ...)
+├── docs/                    # Final, current versions of design documents
+│   └── data_dictionary/     # Data dictionary: every table, column, type and rule (Excel)
+├── doc_history/             # All versions of ERDs and data dictionaries (v1, v2, ...)
 ├── .env.example             # Template for database settings
 ├── docker-compose.yml       # PostgreSQL container setup
 └── README.md
@@ -191,7 +223,43 @@ Tables are grouped into **schemas** (like folders inside the database). This kee
 | `audit` | Change history written by triggers |
 | `reporting` | Views for analysis (funnel, ROI, advisor performance). Analysts get read-only access here |
 
+### All tables
 
+Every column, data type and rule is documented in the **data dictionary**: [`docs/data_dictionary/cust_relationship_data_dictionary.xlsx`](docs/data_dictionary/cust_relationship_data_dictionary.xlsx) (more schemas will be added).
+
+Status: 🔨 in progress · 📝 designed · ⚪ optional (designed, may not be built)
+
+| # | Schema | Table | Purpose | Status |
+|---|---|---|---|---|
+| 1 | cust_relationship | `customers` | Everyone: visitors, leads and customers (`is_customer`) | 🔨 |
+| 2 | cust_relationship | `customer_addresses` | Address history (residential, mailing, business) | 📝 |
+| 3 | cust_relationship | `customer_contacts` | All phone numbers and extra emails | 📝 |
+| 4 | cust_relationship | `customer_related_persons` | Family, dependents, trusted contact person | 📝 |
+| 5 | cust_relationship | `customer_financial_profiles` | KYC: income, assets, risk tolerance, next review | 📝 |
+| 6 | cust_relationship | `customer_employment` | Employment history | 📝 |
+| 7 | cust_relationship | `customer_identity_verifications` | How and when ID was verified (last 4 digits only) | 📝 |
+| 8 | cust_relationship | `consents` | Marketing (CASL), privacy and e-delivery consent | 📝 |
+| 9 | cust_relationship | `communications` | Emails and pop-ups sent, opened, clicked | ⚪ |
+| 10 | cust_relationship | `corporate_details` | Extra data for corporate customers | ⚪ |
+| 11 | cust_relationship | `corporate_owners` | Owners and beneficial owners of corporate customers | ⚪ |
+| 12 | marketing | `campaigns` | Campaign, dates, budget, status | 📝 |
+| 13 | marketing | `channels` | Lookup: website, email, social, event, referral | 📝 |
+| 14 | marketing | `campaign_channels` | Campaign × channel, tracking code, spend | 📝 |
+| 15 | marketing | `campaign_offers` | Fee discount or bonus interest | 📝 |
+| 16 | marketing | `campaign_touchpoints` | Every known contact with a campaign (funnel stage 1) | 📝 |
+| 17 | sales | `advisors` | Advisor details | 📝 |
+| 18 | sales | `customer_advisor_assignments` | Which advisor serves which client, with history | 📝 |
+| 19 | sales | `appointments` | Bookings and outcomes (funnel stage 2) | 📝 |
+| 20 | sales | `advisor_availability` | Time slots for auto-assigning advisors | ⚪ |
+| 21 | wealth | `investment_products` | Lookup: GICs, funds, ETFs, with rates and fees | 📝 |
+| 22 | wealth | `accounts` | TFSA, RRSP, RRIF, FHSA, RESP, non-registered | 📝 |
+| 23 | wealth | `account_holders` | Customers ↔ accounts (primary, joint, power of attorney) | 📝 |
+| 24 | wealth | `investments` | What was bought, in which account, from which campaign | 📝 |
+| 25 | wealth | `payments` | How each investment was paid | 📝 |
+| 26 | wealth | `transactions` | Deposits, withdrawals, redemptions, fees, interest | 📝 |
+| 27 | audit | `audit_log` | Every insert, update and delete, written by triggers | 📝 |
+
+**How attribution works:** a new customer's first campaign is stored in `customers.acquired_campaign_id` (first-touch). Each investment by an existing customer stores its own `investments.campaign_id`. `campaign_touchpoints` keeps the full history for other attribution models in Python.
 
 ### Design conventions
 
@@ -205,7 +273,7 @@ Tables are grouped into **schemas** (like folders inside the database). This kee
 - No sensitive numbers: never full SIN, ID or bank account numbers.
 - History is kept as rows (e.g. a new address row with `lived_until` on the old one), not overwritten.
 
-### Built: `cust_relationship.customers`
+### First table: `cust_relationship.customers`
 
 One table for everyone. `is_customer = false` is a visitor or lead; `true` is a client with an account. When a visitor converts, the **same row** is updated, so their history stays in one place.
 
@@ -214,7 +282,6 @@ One table for everyone. `is_customer = false` is a visitor or lead; `true` is a 
 | `customer_id` | `BIGINT` | **PK**, generated always as identity | Internal unique ID |
 | `first_name` / `last_name` | `VARCHAR(100)` | NOT NULL | Name |
 | `email` | `VARCHAR(255)` | NOT NULL, unique (case-insensitive) | `John@Mail.com` and `john@mail.com` count as the same |
-| `phone` | `VARCHAR(20)` | NULL | Main phone number |
 | `is_customer` | `BOOLEAN` | NOT NULL, DEFAULT `false` | `true` = has an account |
 | `customer_number` | `VARCHAR(20)` | UNIQUE; required only for customers | Readable ID, e.g. `CUS-000123` |
 | `customer_type` | `VARCHAR(20)` | CHECK (`individual`, `corporate`); required for customers | Person or company |
@@ -242,8 +309,10 @@ One table for everyone. `is_customer = false` is a visitor or lead; `true` is a 
 - [x] Repository, Docker + PostgreSQL 17 + pgAdmin setup
 - [x] Schemas: `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting`, `audit`
 - [x] Full design of all 27 tables (ERD v1 in `doc_history/`)
+- [x] Data dictionary for `cust_relationship` (`docs/data_dictionary/`)
 - [ ] **Module 1: Customer relationship**
-  - [x] `customers` table + `updated_at` trigger
+  - [x] `customers` table designed
+  - [ ] `customers` migration + `updated_at` trigger function (SQL files in the repo)
   - [ ] `customer_addresses`, `customer_contacts`, `customer_related_persons`
   - [ ] `customer_financial_profiles`, `customer_employment`, `customer_identity_verifications`, `consents`
 - [ ] Module 2: Sales (`advisors`, `customer_advisor_assignments`, `appointments`)
