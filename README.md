@@ -93,15 +93,14 @@ Click **Save**. The server appears in the left panel.
 
 ### Step 6: Create the schemas and tables
 
-Run the SQL files **in this order**. Order matters: tables live inside schemas, so the schemas must exist first.
+Run the SQL files **in this order**. Order matters: tables live inside schemas, and every table's trigger uses the shared function.
 
-| Order | File | Creates | Status |
-|---|---|---|---|
-| 1 | `db/schemas/create_schemas.sql` | All 6 schemas | ✅ available |
-| 2 | `db/functions/*.sql` | Shared functions (e.g. the trigger that keeps `updated_at` current) | coming soon |
-| 3 | `db/migrations/001_...`, `002_...` | The tables, in number order | coming soon |
-
-Right now only step 1 exists; the function and table files are added here as each module is finished.
+| Order | File | Creates |
+|---|---|---|
+| 1 | `db/schemas/create_schemas.sql` | All 6 schemas |
+| 2 | `db/functions/set_updated_at.sql` | The trigger function that keeps `updated_at` current |
+| 3 | `db/migrations/001_create_customers.sql` | `cust_relationship.customers` |
+| 4+ | `db/migrations/002_...`, `003_...` | Later tables, in number order (added as each module is finished) |
 
 For each file, in pgAdmin:
 
@@ -109,15 +108,17 @@ For each file, in pgAdmin:
 2. Click the **folder icon (Open File)** and choose the file from your cloned project folder. (Or copy the file's contents from GitHub and paste them in.)
 3. Press **F5** (Execute). The **Messages** tab should show no errors.
 
-When it has run, refresh **Schemas** in the left panel: you should see `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting` and `audit`.
+When all files have run, refresh **Schemas** in the left panel: you should see `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting` and `audit`, and the `customers` table under `cust_relationship → Tables`.
 
-**Prefer the terminal?** The project's `db/` folder is available inside the container at `/db`, so a file can also be run like this:
+**Prefer the terminal?** The project's `db/` folder is available inside the container at `/db`, so the files can also be run like this:
 
 ```powershell
 docker compose exec db psql -U campaign_admin -d campaign_db -f /db/schemas/create_schemas.sql
+docker compose exec db psql -U campaign_admin -d campaign_db -f /db/functions/set_updated_at.sql
+docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/001_create_customers.sql
 ```
 
-The file is safe to run again (`IF NOT EXISTS`), so running it twice by mistake does no harm.
+All files are safe to run again (`IF NOT EXISTS` / `CREATE OR REPLACE`), so running one twice by mistake does no harm.
 
 ### Useful commands
 
@@ -148,6 +149,7 @@ Paths like `/db/...` are **inside the container**: the project's `db/` folder is
 | `port is already allocated` | Something else uses port 5433. Change `POSTGRES_PORT` in `.env` (e.g. `5434`) and run `docker compose up -d` again. |
 | `password authentication failed` in pgAdmin | The password only applies on first creation. Use the original one, or reset with `docker compose down -v` (deletes data). |
 | `schema "cust_relationship" does not exist` | The files were run out of order. Run `create_schemas.sql` first, then the others (Step 6). |
+| `function public.set_updated_at() does not exist` | Run `db/functions/set_updated_at.sql` before the migrations (Step 6). |
 
 ---
 
@@ -190,8 +192,8 @@ The project answers questions like:
 campaign-attribution-analytics/
 ├── db/                      # Everything PostgreSQL
 │   ├── schemas/             # Creates all schemas (run first)
-│   ├── functions/           # Shared functions & trigger functions   (coming soon)
-│   ├── migrations/          # Table definitions, run in order        (coming soon)
+│   ├── functions/           # Shared functions & trigger functions (run second)
+│   ├── migrations/          # Table definitions, run in order (001_, 002_, ...)
 │   ├── views/               # Reporting views                       (planned)
 │   └── seeds/               # Sample data                           (planned)
 ├── queries/                 # Business questions answered in SQL    (planned)
@@ -227,11 +229,11 @@ Tables are grouped into **schemas** (like folders inside the database). This kee
 
 Every column, data type and rule is documented in the **data dictionary**: [`docs/data_dictionary/cust_relationship_data_dictionary.xlsx`](docs/data_dictionary/cust_relationship_data_dictionary.xlsx) (more schemas will be added).
 
-Status: 🔨 in progress · 📝 designed · ⚪ optional (designed, may not be built)
+Status: ✅ built · 📝 designed · ⚪ optional (designed, may not be built)
 
 | # | Schema | Table | Purpose | Status |
 |---|---|---|---|---|
-| 1 | cust_relationship | `customers` | Everyone: visitors, leads and customers (`is_customer`) | 🔨 |
+| 1 | cust_relationship | `customers` | Everyone: visitors, leads and customers (`is_customer`) | ✅ |
 | 2 | cust_relationship | `customer_addresses` | Address history (residential, mailing, business) | 📝 |
 | 3 | cust_relationship | `customer_contacts` | All phone numbers and extra emails | 📝 |
 | 4 | cust_relationship | `customer_related_persons` | Family, dependents, trusted contact person | 📝 |
@@ -273,7 +275,7 @@ Status: 🔨 in progress · 📝 designed · ⚪ optional (designed, may not be 
 - No sensitive numbers: never full SIN, ID or bank account numbers.
 - History is kept as rows (e.g. a new address row with `lived_until` on the old one), not overwritten.
 
-### First table: `cust_relationship.customers`
+### Built: `cust_relationship.customers`
 
 One table for everyone. `is_customer = false` is a visitor or lead; `true` is a client with an account. When a visitor converts, the **same row** is updated, so their history stays in one place.
 
@@ -290,6 +292,7 @@ One table for everyone. `is_customer = false` is a visitor or lead; `true` is a 
 | `acquired_campaign_id` | `BIGINT` | NULL, FK → `marketing.campaigns` *(added when that table exists)* | First-touch attribution |
 | `first_seen_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT `now()` | When the person first appeared |
 | `became_customer_at` | `TIMESTAMPTZ` | Required for customers; ≥ `first_seen_at` | When the account was opened |
+| `tcp_declined_at` | `TIMESTAMPTZ` | NULL; only for customers | When the client declined to name a trusted contact person. NULL = not declined |
 | `created_at` / `updated_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT `now()` | `updated_at` is set by a trigger |
 | `deleted_at` | `TIMESTAMPTZ` | NULL | Soft delete. `NULL` = active |
 
@@ -299,8 +302,10 @@ One table for everyone. `is_customer = false` is a visitor or lead; `true` is a 
 - An individual customer must have a date of birth; it can't be in the future.
 - `became_customer_at` can't be earlier than `first_seen_at`.
 - No two people can share an email address (ignoring upper/lower case).
+- Only customers can have a `tcp_declined_at` date.
 
-*Planned change:* a later migration adds `tcp_declined_at` (records that a client declined to name a trusted contact person).
+**Also in migration 001:** a trigger that keeps `updated_at` current, a case-insensitive unique index on `email`, and an index on `acquired_campaign_id`. Phone numbers are stored in `customer_contacts`, not here.
+
 
 ---
 
@@ -311,8 +316,7 @@ One table for everyone. `is_customer = false` is a visitor or lead; `true` is a 
 - [x] Full design of all 27 tables (ERD v1 in `doc_history/`)
 - [x] Data dictionary for `cust_relationship` (`docs/data_dictionary/`)
 - [ ] **Module 1: Customer relationship**
-  - [x] `customers` table designed
-  - [ ] `customers` migration + `updated_at` trigger function (SQL files in the repo)
+  - [x] `customers` table: migration 001 + `updated_at` trigger function
   - [ ] `customer_addresses`, `customer_contacts`, `customer_related_persons`
   - [ ] `customer_financial_profiles`, `customer_employment`, `customer_identity_verifications`, `consents`
 - [ ] Module 2: Sales (`advisors`, `customer_advisor_assignments`, `appointments`)
