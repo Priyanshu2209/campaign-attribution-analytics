@@ -235,7 +235,7 @@ Status: ✅ built · 📝 designed · ⚪ optional (designed, may not be built)
 |---|---|---|---|---|
 | 1 | cust_relationship | `customers` | Everyone: visitors, leads and customers (`is_customer`) | ✅ |
 | 2 | cust_relationship | `customer_addresses` | Address history (residential, mailing, business) | ✅ |
-| 3 | cust_relationship | `customer_contacts` | All phone numbers and extra emails | 📝 |
+| 3 | cust_relationship | `customer_contacts` | All phone numbers and extra emails | ✅ |
 | 4 | cust_relationship | `customer_related_persons` | Family, dependents, trusted contact person | 📝 |
 | 5 | cust_relationship | `customer_financial_profiles` | KYC: income, assets, risk tolerance, next review | 📝 |
 | 6 | cust_relationship | `customer_employment` | Employment history | 📝 |
