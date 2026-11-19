@@ -9,8 +9,9 @@
 --              db/migrations/001_create_customers.sql
 -- =============================================================
 
+BEGIN;
 
-CREATE TABLE cust_relationship.customer_contacts
+CREATE TABLE IF NOT EXISTS cust_relationship.customer_contacts
 (
     customer_contact_id bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
     customer_id bigint NOT NULL,
@@ -25,9 +26,8 @@ CREATE TABLE cust_relationship.customer_contacts
     CONSTRAINT fk_customer_contacts_customer FOREIGN KEY (customer_id)
         REFERENCES cust_relationship.customers (customer_id) MATCH SIMPLE
         ON UPDATE NO ACTION
-        ON DELETE NO ACTION
-        NOT VALID,
-    CONSTRAINT chk_customer_contacts_contact_type CHECK (contact_type IN ('mobile', 'home_phone', 'work_phone', 'email')) NOT VALID
+        ON DELETE NO ACTION,
+    CONSTRAINT chk_customer_contacts_contact_type CHECK (contact_type IN ('mobile', 'home_phone', 'work_phone', 'email'))
 );
 
 ALTER TABLE IF EXISTS cust_relationship.customer_contacts

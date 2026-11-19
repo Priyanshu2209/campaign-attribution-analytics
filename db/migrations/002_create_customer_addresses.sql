@@ -1,80 +1,74 @@
--- =============================================================
--- Migration 002: cust_relationship.customer_addresses
--- Purpose: Address history for each customer.
---          A move = set lived_until on the old row, then add a
---          new row. Current address = lived_until IS NULL.
---
--- Needs first: db/schemas/create_schemas.sql
---              db/functions/set_updated_at.sql
---              db/migrations/001_create_customers.sql
--- =============================================================
+-- Table: cust_relationship.customer_addresses
 
-CREATE TABLE IF NOT EXISTS cust_relationship.customer_addresses(
-	customer_address_id BIGINT GENERATED ALWAYS AS IDENTITY,
-	customer_id BIGINT NOT NULL, 
-	address_type VARCHAR(20) NOT NULL,
-	unit_number VARCHAR(10),
-	address_line1 VARCHAR(200) NOT NULL,
-	address_line2 VARCHAR(200),
-	city VARCHAR(100) NOT NULL,
-	province CHAR(2) NOT NULL,
-	postal_code CHAR(7) NOT NULL,
-	lived_from DATE NOT NULL DEFAULT CURRENT_DATE,
-	lived_until DATE,
-	create_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at TIMESTAMPTZ,                
+-- DROP TABLE IF EXISTS cust_relationship.customer_addresses;
 
-	CONSTRAINT pk_customer_addresses
-		PRIMARY KEY (customer_address_id),
+CREATE TABLE IF NOT EXISTS cust_relationship.customer_addresses
+(
+    customer_address_id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    customer_id bigint NOT NULL,
+    address_type character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    unit_number character varying(10) COLLATE pg_catalog."default",
+    address_line1 character varying(200) COLLATE pg_catalog."default" NOT NULL,
+    address_line2 character varying(200) COLLATE pg_catalog."default",
+    city character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    province character(2) COLLATE pg_catalog."default" NOT NULL,
+    postal_code character(7) COLLATE pg_catalog."default" NOT NULL,
+    lived_from date NOT NULL DEFAULT CURRENT_DATE,
+    lived_until date,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    deleted_at timestamp with time zone,
+    CONSTRAINT pk_customer_addresses PRIMARY KEY (customer_address_id),
+    CONSTRAINT fk_customer_addresses_customer FOREIGN KEY (customer_id)
+        REFERENCES cust_relationship.customers (customer_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT chk_customer_addresses_address_type CHECK (address_type::text = ANY (ARRAY['residential'::character varying, 'mailing'::character varying, 'business'::character varying]::text[])),
+    CONSTRAINT chk_customer_addresses_lived_dates CHECK (lived_until >= lived_from),
+    CONSTRAINT chk_customer_addresses_postal_code CHECK (postal_code ~ '^[A-Z][0-9][A-Z] [0-9][A-Z][0-9]$'::text),
+    CONSTRAINT chk_customer_addresses_province CHECK (province = ANY (ARRAY['AB'::bpchar, 'BC'::bpchar, 'MB'::bpchar, 'NB'::bpchar, 'NL'::bpchar, 'NS'::bpchar, 'NT'::bpchar, 'NU'::bpchar, 'ON'::bpchar, 'PE'::bpchar, 'QC'::bpchar, 'SK'::bpchar, 'YT'::bpchar]))
+)
 
-	CONSTRAINT fk_customer_addresses_customer
-		FOREIGN KEY (customer_id)
-		REFERENCES cust_relationship.customers(customer_id),
-
-	CONSTRAINT chk_customer_addresses_address_type
-		CHECK(address_type IN ('residential', 'mailing','business')),
-
-	CONSTRAINT chk_customer_addresses_province
-		CHECK(province IN ('AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT')),
-
-	-- Canadian format: letter digit letter, space, digit letter digit (e.g. M5V 2T6)
-    CONSTRAINT chk_customer_addresses_postal_code
-        CHECK (postal_code ~ ('^[A-Z][0-9][A-Z] [0-9][A-Z][0-9]$')),
-
-    -- Can't stop living somewhere before moving in
-    CONSTRAINT chk_customer_addresses_lived_dates
-        CHECK (lived_until >= lived_from)
-	
-);
+TABLESPACE pg_default;
 
 ALTER TABLE IF EXISTS cust_relationship.customer_addresses
     OWNER to campaign_admin;
-	
-COMMENT ON TABLE cust_relationship.customer_addresses IS
-    'Address history per customer. Current address = lived_until IS NULL and deleted_at IS NULL.';
-COMMENT ON COLUMN cust_relationship.customer_addresses.lived_from IS
-    'Real-world move-in date (not the date it was entered).';
-COMMENT ON COLUMN cust_relationship.customer_addresses.lived_until IS
-    'Real-world last day at this address. NULL = current address.';
-COMMENT ON COLUMN cust_relationship.customer_addresses.deleted_at IS
-    'Soft delete, only for rows entered by mistake. A move uses lived_until instead.';
 
---Indexes
+COMMENT ON TABLE cust_relationship.customer_addresses
+    IS 'Address history per customer. Current address = lived_until IS NULL and deleted_at IS NULL.';
+
+COMMENT ON COLUMN cust_relationship.customer_addresses.lived_from
+    IS 'Real-world move-in date (not the date it was entered).';
+
+COMMENT ON COLUMN cust_relationship.customer_addresses.lived_until
+    IS 'Real-world last day at this address. NULL = current address.';
+
+COMMENT ON COLUMN cust_relationship.customer_addresses.deleted_at
+    IS 'Soft delete, only for rows entered by mistake. A move uses lived_until instead.';
+-- Index: idx_customer_addresses_customer_id
+
+-- DROP INDEX IF EXISTS cust_relationship.idx_customer_addresses_customer_id;
+
 CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer_id
-	ON cust_relationship.customer_addresses(customer_id);
+    ON cust_relationship.customer_addresses USING btree
+    (customer_id ASC NULLS LAST)
+    TABLESPACE pg_default;
+-- Index: uq_customer_addresses_one_current_per_type
+
+-- DROP INDEX IF EXISTS cust_relationship.uq_customer_addresses_one_current_per_type;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_customer_addresses_one_current_per_type
-	ON cust_relationship.customer_addresses(customer_id,address_type)
-	where lived_until IS NULL AND deleted_at IS NULL;
+    ON cust_relationship.customer_addresses USING btree
+    (customer_id ASC NULLS LAST, address_type COLLATE pg_catalog."default" ASC NULLS LAST)
+    TABLESPACE pg_default
+    WHERE lived_until IS NULL AND deleted_at IS NULL;
 
+-- Trigger: trg_customer_addresses_set_updated_at
 
---trigger for update
+-- DROP TRIGGER IF EXISTS trg_customer_addresses_set_updated_at ON cust_relationship.customer_addresses;
+
 CREATE OR REPLACE TRIGGER trg_customer_addresses_set_updated_at
-	BEFORE UPDATE ON cust_relationship.customer_addresses
-	FOR EACH ROW
-	EXECUTE FUNCTION public.set_updated_at();
-
-COMMIT;
-
-
+    BEFORE UPDATE 
+    ON cust_relationship.customer_addresses
+    FOR EACH ROW
+    EXECUTE FUNCTION public.set_updated_at();

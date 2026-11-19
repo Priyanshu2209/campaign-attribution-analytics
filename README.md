@@ -100,7 +100,9 @@ Run the SQL files **in this order**. Order matters: tables live inside schemas, 
 | 1 | `db/schemas/create_schemas.sql` | All 6 schemas |
 | 2 | `db/functions/set_updated_at.sql` | The trigger function that keeps `updated_at` current |
 | 3 | `db/migrations/001_create_customers.sql` | `cust_relationship.customers` |
-| 4+ | `db/migrations/002_...`, `003_...` | Later tables, in number order (added as each module is finished) |
+| 4 | `db/migrations/002_create_customer_addresses.sql` | `cust_relationship.customer_addresses` |
+| 5 | `db/migrations/003_create_customer_contacts.sql` | `cust_relationship.customer_contacts` |
+| 6+ | `db/migrations/004_...` and later | Later tables, in number order (added as each module is finished) |
 
 For each file, in pgAdmin:
 
@@ -108,7 +110,7 @@ For each file, in pgAdmin:
 2. Click the **folder icon (Open File)** and choose the file from your cloned project folder. (Or copy the file's contents from GitHub and paste them in.)
 3. Press **F5** (Execute). The **Messages** tab should show no errors.
 
-When all files have run, refresh **Schemas** in the left panel: you should see `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting` and `audit`, and the `customers` table under `cust_relationship → Tables`.
+When all files have run, refresh **Schemas** in the left panel: you should see `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting` and `audit`, and the `customers`, `customer_addresses` and `customer_contacts` tables under `cust_relationship → Tables`.
 
 **Prefer the terminal?** The project's `db/` folder is available inside the container at `/db`, so the files can also be run like this:
 
@@ -116,6 +118,8 @@ When all files have run, refresh **Schemas** in the left panel: you should see `
 docker compose exec db psql -U campaign_admin -d campaign_db -f /db/schemas/create_schemas.sql
 docker compose exec db psql -U campaign_admin -d campaign_db -f /db/functions/set_updated_at.sql
 docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/001_create_customers.sql
+docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/002_create_customer_addresses.sql
+docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/003_create_customer_contacts.sql
 ```
 
 All files are safe to run again (`IF NOT EXISTS` / `CREATE OR REPLACE`), so running one twice by mistake does no harm.
@@ -137,7 +141,7 @@ Paths like `/db/...` are **inside the container**: the project's `db/` folder is
 
 ### For developers: adding a new table
 
-1. Create the next numbered file in `db/migrations/`, e.g. `002_create_customer_addresses.sql`. Always reference tables with their schema (`cust_relationship.customer_addresses`).
+1. Create the next numbered file in `db/migrations/`, e.g. `004_create_customer_related_persons.sql`. Always reference tables with their schema (`cust_relationship.customer_addresses`).
 2. Run it in pgAdmin (Step 6) and test it.
 3. Never edit a migration that is already pushed. Make a new one (e.g. `003_alter_...sql`) instead, so everyone can update their database the same way.
 
@@ -239,7 +243,7 @@ Status: ✅ built · 📝 designed · ⚪ optional (designed, may not be built)
 | 4 | cust_relationship | `customer_related_persons` | Family, dependents, trusted contact person | 📝 |
 | 5 | cust_relationship | `customer_financial_profiles` | KYC: income, assets, risk tolerance, next review | 📝 |
 | 6 | cust_relationship | `customer_employment` | Employment history | 📝 |
-| 7 | cust_relationship | `customer_identity_verifications` | How and when ID was verified (last 4 digits only) | 📝 |
+| 7 | cust_relationship | `customer_identity_verifications` | How and when ID was verified (FINTRAC methods; ID number access-restricted) | 📝 |
 | 8 | cust_relationship | `consents` | Marketing (CASL), privacy and e-delivery consent | 📝 |
 | 9 | cust_relationship | `communications` | Emails and pop-ups sent, opened, clicked | ⚪ |
 | 10 | cust_relationship | `corporate_details` | Extra data for corporate customers | ⚪ |
@@ -272,7 +276,7 @@ Status: ✅ built · 📝 designed · ⚪ optional (designed, may not be built)
 - Status values: `VARCHAR` + `CHECK` constraints. Lookup tables only when they carry extra data.
 - Readable constraint names (e.g. `chk_customers_kyc_status`) and an index on every foreign key.
 - No stored values that go stale (age is calculated from `date_of_birth`).
-- No sensitive numbers: never full SIN, ID or bank account numbers.
+- Sensitive numbers kept to the minimum: never SIN or bank account numbers. The one exception is the ID document number in `customer_identity_verifications`, which anti-money-laundering rules (FINTRAC) require; it is access-restricted (masked for everyone except compliance).
 - History is kept as rows (e.g. a new address row with `lived_until` on the old one), not overwritten.
 
 ### Built: `cust_relationship.customers`
@@ -314,11 +318,13 @@ One table for everyone. `is_customer = false` is a visitor or lead; `true` is a 
 - [x] Repository, Docker + PostgreSQL 17 + pgAdmin setup
 - [x] Schemas: `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting`, `audit`
 - [x] Full design of all 27 tables (ERD v1 in `doc_history/`)
-- [x] Data dictionary for `cust_relationship` (`docs/data_dictionary/`)
+- [x] Data dictionary for `cust_relationship` (`docs/data_dictionary/`), now v3 with `customer_identity_verifications`
 - [ ] **Module 1: Customer relationship**
   - [x] `customers` table: migration 001 + `updated_at` trigger function
-  - [ ] `customer_addresses`, `customer_contacts`, `customer_related_persons`
-  - [ ] `customer_financial_profiles`, `customer_employment`, `customer_identity_verifications`, `consents`
+  - [x] `customer_addresses` (002), `customer_contacts` (003)
+  - [ ] `customer_related_persons`
+  - [ ] `customer_employment`, `consents`
+  - [ ] `customer_financial_profiles`, `customer_identity_verifications` (after `sales.advisors`)
 - [ ] Module 2: Sales (`advisors`, `customer_advisor_assignments`, `appointments`)
 - [ ] Module 3: Marketing (`campaigns`, `channels`, `campaign_channels`, `campaign_offers`, `campaign_touchpoints`)
 - [ ] Module 4: Wealth (`investment_products`, `accounts`, `account_holders`, `investments`, `payments`, `transactions`)
