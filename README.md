@@ -102,7 +102,8 @@ Run the SQL files **in this order**. Order matters: tables live inside schemas, 
 | 3 | `db/migrations/001_create_customers.sql` | `cust_relationship.customers` |
 | 4 | `db/migrations/002_create_customer_addresses.sql` | `cust_relationship.customer_addresses` |
 | 5 | `db/migrations/003_create_customer_contacts.sql` | `cust_relationship.customer_contacts` |
-| 6+ | `db/migrations/004_...` and later | Later tables, in number order (added as each module is finished) |
+| 6 | `db/migrations/004_create_customer_related_persons.sql` | `cust_relationship.customer_related_persons` |
+| 7+ | `db/migrations/005_...` and later | Later tables, in number order (added as each module is finished) |
 
 For each file, in pgAdmin:
 
@@ -110,7 +111,7 @@ For each file, in pgAdmin:
 2. Click the **folder icon (Open File)** and choose the file from your cloned project folder. (Or copy the file's contents from GitHub and paste them in.)
 3. Press **F5** (Execute). The **Messages** tab should show no errors.
 
-When all files have run, refresh **Schemas** in the left panel: you should see `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting` and `audit`, and the `customers`, `customer_addresses` and `customer_contacts` tables under `cust_relationship → Tables`.
+When all files have run, refresh **Schemas** in the left panel: you should see `cust_relationship`, `marketing`, `sales`, `wealth`, `reporting` and `audit`, and the `customers`, `customer_addresses`, `customer_contacts` and `customer_related_persons` tables under `cust_relationship → Tables`.
 
 **Prefer the terminal?** The project's `db/` folder is available inside the container at `/db`, so the files can also be run like this:
 
@@ -120,6 +121,7 @@ docker compose exec db psql -U campaign_admin -d campaign_db -f /db/functions/se
 docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/001_create_customers.sql
 docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/002_create_customer_addresses.sql
 docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/003_create_customer_contacts.sql
+docker compose exec db psql -U campaign_admin -d campaign_db -f /db/migrations/004_create_customer_related_persons.sql
 ```
 
 All files are safe to run again (`IF NOT EXISTS` / `CREATE OR REPLACE`), so running one twice by mistake does no harm.
@@ -141,7 +143,7 @@ Paths like `/db/...` are **inside the container**: the project's `db/` folder is
 
 ### For developers: adding a new table
 
-1. Create the next numbered file in `db/migrations/`, e.g. `004_create_customer_related_persons.sql`. Always reference tables with their schema (`cust_relationship.customer_addresses`).
+1. Create the next numbered file in `db/migrations/`, e.g. `005_create_customer_employment.sql`. Always reference tables with their schema (`cust_relationship.customer_addresses`).
 2. Run it in pgAdmin (Step 6) and test it.
 3. Never edit a migration that is already pushed. Make a new one (e.g. `003_alter_...sql`) instead, so everyone can update their database the same way.
 
@@ -240,7 +242,7 @@ Status: ✅ built · 📝 designed · ⚪ optional (designed, may not be built)
 | 1 | cust_relationship | `customers` | Everyone: visitors, leads and customers (`is_customer`) | ✅ |
 | 2 | cust_relationship | `customer_addresses` | Address history (residential, mailing, business) | ✅ |
 | 3 | cust_relationship | `customer_contacts` | All phone numbers and extra emails | ✅ |
-| 4 | cust_relationship | `customer_related_persons` | Family, dependents, trusted contact person | 📝 |
+| 4 | cust_relationship | `customer_related_persons` | Family, dependents, trusted contact person | ✅ |
 | 5 | cust_relationship | `customer_financial_profiles` | KYC: income, assets, risk tolerance, next review | 📝 |
 | 6 | cust_relationship | `customer_employment` | Employment history | 📝 |
 | 7 | cust_relationship | `customer_identity_verifications` | How and when ID was verified (FINTRAC methods; ID number access-restricted) | 📝 |
@@ -321,8 +323,7 @@ One table for everyone. `is_customer = false` is a visitor or lead; `true` is a 
 - [x] Data dictionary for `cust_relationship` (`docs/data_dictionary/`), now v3 with `customer_identity_verifications`
 - [ ] **Module 1: Customer relationship**
   - [x] `customers` table: migration 001 + `updated_at` trigger function
-  - [x] `customer_addresses` (002), `customer_contacts` (003)
-  - [ ] `customer_related_persons`
+  - [x] `customer_addresses` (002), `customer_contacts` (003), `customer_related_persons` (004)
   - [ ] `customer_employment`, `consents`
   - [ ] `customer_financial_profiles`, `customer_identity_verifications` (after `sales.advisors`)
 - [ ] Module 2: Sales (`advisors`, `customer_advisor_assignments`, `appointments`)
